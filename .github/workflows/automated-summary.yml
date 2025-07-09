@@ -1,0 +1,30 @@
+name: Weekly Linear Cycle Summary
+
+on:
+  schedule:
+    - cron: "0 17 * * FRI"  # Every Friday at 5 PM UTC
+  workflow_dispatch:        # Allow manual trigger from the GitHub UI
+
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+    env:
+      LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      TEAM_ID: ${{ secrets.TEAM_ID }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run summary script
+        run: python scripts/summarize_cycle.py

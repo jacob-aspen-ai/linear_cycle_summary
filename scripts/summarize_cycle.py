@@ -11,7 +11,7 @@ TEAM_ID = os.getenv("TEAM_ID")
 
 # Fetch all issues for the team
 query = """
-query TeamIssues($teamId: ID!) {
+query TeamIssues($teamId: String!) {
   team(id: $teamId) {
     issues(first: 200) {
       nodes {

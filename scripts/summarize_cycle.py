@@ -79,6 +79,7 @@ query CycleIssues($teamId: ID!, $cycleNumber: Float!) {
           title
           state { name }
           assignee { name }
+          updatedAt
         }
       }
     }
@@ -100,29 +101,38 @@ if "data" not in data:
 
 issues = data["data"]["cycles"]["nodes"][0]["issues"]["nodes"]
 
-formatted = []
+from datetime import datetime, timedelta, timezone
+one_week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+recent_issues = []
 for issue in issues:
-    title = issue["title"]
-    state = issue["state"]["name"]
+    updated_at = issue["updatedAt"]
+    # Linear returns ISO8601 with Z, Python needs +00:00
+    updated_at_dt = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+    if updated_at_dt > one_week_ago:
+        recent_issues.append(issue)
+
+# Group by assignee
+by_person = {}
+for issue in recent_issues:
     assignee = issue["assignee"]["name"] if issue["assignee"] else "Unassigned"
-    formatted.append(f"- [{state}] {title} — {assignee}")
-issue_list = "\n".join(formatted)
+    by_person.setdefault(assignee, []).append(issue)
+
+# Format summary by person
+summary_lines = []
+for person, person_issues in by_person.items():
+    summary_lines.append(f"\n👤 {person}:")
+    for issue in person_issues:
+        summary_lines.append(f"  - [{issue['state']['name']}] {issue['title']} (updated {issue['updatedAt']})")
+summary_text = "\n".join(summary_lines)
 
 prompt = f"""
-You are a technical assistant and highly experienced product manager at an AI startup. Summarize this Linear cycle.
+You are a technical assistant and highly experienced product manager at an AI startup. Summarize the following Linear issues, grouped by person, and only include issues that were updated in the past week. For each person, briefly describe what they worked on or updated.
 
-Group into:
-🚀 Features shipped 
-⚠️ SEVs/incidents handled 
-🔁 Carried over  
-🧠 Team focus  
-
-Make sure to note who completed what. Make it concise and engaging.
-
-Issues:
-{issue_list}
+Issues updated in the past week, grouped by assignee:
+{summary_text}
 """
-print(issue_list) 
+
+print(summary_text)
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 completion = client.chat.completions.create(

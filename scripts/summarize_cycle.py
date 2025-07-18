@@ -48,7 +48,7 @@ else:
               completedAt: { neq: null }
             }
             first: 1
-            orderBy: completedAt
+            orderBy: updatedAt
           ) {
             nodes {
               number

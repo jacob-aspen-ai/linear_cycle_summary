@@ -4,9 +4,9 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 
 load_dotenv()
-LINEAR_API_KEY = os.getenv("LINEAR_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+LINEAR_API_KEY = os.getenv("LINEAR_API_KEY", "").strip()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL", "").strip()
 
 # TEAM_ID is no longer needed
 
@@ -25,7 +25,7 @@ query {
 teams_resp = requests.post(
     "https://api.linear.app/graphql",
     json={"query": teams_query},
-    headers={"Authorization": f"{LINEAR_API_KEY}"}
+    headers={"Authorization": f"Bearer {LINEAR_API_KEY}"}
 )
 teams_data = teams_resp.json()
 if "data" not in teams_data or not teams_data["data"].get("teams"):
@@ -74,7 +74,7 @@ for team in teams:
     issues_resp = requests.post(
         "https://api.linear.app/graphql",
         json={"query": issues_query, "variables": {"teamId": team_id}},
-        headers={"Authorization": f"{LINEAR_API_KEY}"}
+        headers={"Authorization": f"Bearer {LINEAR_API_KEY}"}
     )
     issues_data = issues_resp.json()
     if "data" not in issues_data or not issues_data["data"].get("team"):

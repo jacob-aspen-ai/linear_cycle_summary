@@ -37,9 +37,14 @@ teams = teams_data["data"]["teams"]["nodes"]
 
 # 2. For each team, fetch issues and organize by person
 one_week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+week_start = one_week_ago.strftime("%b %d")
+week_end = datetime.now(timezone.utc).strftime("%b %d")
+updated_label = f"Updated {week_start} – {week_end}"
+# Custom state order for sorting recently updated issues
+status_order = ["Backlog", "To do", "In Progress", "In Review", "Ready for QA", "Done"]
 state_categories = [
-    ("Updated in the last week", None),
-    ("To Do", "To Do"),
+    (updated_label, None),
+    ("To Do", "To do"),
     ("In Progress", "In Progress"),
     ("In Review", "In Review"),
     ("Ready for QA", "Ready for QA"),
@@ -85,6 +90,8 @@ for team in teams:
         updated_at = issue["updatedAt"]
         updated_at_dt = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
         state_name = issue["state"]["name"]
+        if state_name in ("Duplicate", "Canceled"):
+            continue
         # Initialize nested dicts
         if assignee not in person_team_issues:
             person_team_issues[assignee] = {}
@@ -92,7 +99,7 @@ for team in teams:
             person_team_issues[assignee][team_name] = {cat: [] for cat, _ in state_categories}
         # Categorize
         if updated_at_dt > one_week_ago:
-            person_team_issues[assignee][team_name]["Updated in the last week"].append(issue)
+            person_team_issues[assignee][team_name][updated_label].append(issue)
         elif state_name == "To Do":
             person_team_issues[assignee][team_name]["To Do"].append(issue)
         elif state_name == "In Progress":
@@ -102,52 +109,78 @@ for team in teams:
         elif state_name == "Ready for QA":
             person_team_issues[assignee][team_name]["Ready for QA"].append(issue)
 
-# 3. Format summary by person, then by team, then by category
-summary_lines = []
+print("🔍 SLACK_WEBHOOK_URL:", SLACK_WEBHOOK_URL)
+
 for person in sorted(person_team_issues.keys()):
-    summary_lines.append(f"\n👤 {person}:")
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"{person} – Week of {week_start}–{week_end}",
+                "emoji": False
+            }
+        },
+        {"type": "divider"}
+    ]
+
     for team_name in sorted(person_team_issues[person].keys()):
-        summary_lines.append(f"  🏷️ Team: {team_name}")
+        team_data = person_team_issues[person][team_name]
+        if not any(team_data[cat] for cat, _ in state_categories):
+            continue  # Skip if no issues for any category
+
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*{team_name}*"
+            }
+        })
+
         seen_issues = set()
         for cat, _ in state_categories:
-            issues = person_team_issues[person][team_name][cat]
-            # Avoid duplicates between categories
+            issues = team_data[cat]
             filtered_issues = [
                 issue for issue in issues
                 if (issue["title"], issue["state"]["name"]) not in seen_issues
             ]
-            if filtered_issues:
-                summary_lines.append(f"    • {cat}:")
-                for issue in filtered_issues:
-                    summary_lines.append(f"      - [{issue['state']['name']}] {issue['title']} (updated {issue['updatedAt']})")
-                    seen_issues.add((issue["title"], issue["state"]["name"]))
-summary_text = "\n".join(summary_lines)
+            if cat == updated_label:
+                filtered_issues.sort(key=lambda i: status_order.index(i["state"]["name"]) if i["state"]["name"] in status_order else len(status_order))
+            if not filtered_issues:
+                continue
 
-prompt = f"""
-You are a technical assistant and highly experienced product manager at an AI startup. For each person, and for each team, summarize their issues, separated into:
-1. Updated in the last week
-2. To Do
-3. In Progress
-4. In Review
-5. Ready for QA
-Do not include unassigned issues. Avoid listing the same issue twice for a person. For each person, briefly describe what they worked on or have in progress.
+            label = "Recently Updated" if cat == updated_label else cat
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*• {label}:*"
+                }
+            })
 
-Importantly: format the report in Slack Block Kit format, so that it can be posted to Slack.
+            issue_lines = "\n".join(
+                f"> • [{issue['state']['name']}] {issue['title']}"
+                for issue in filtered_issues
+            )
+            if len(issue_lines) > 2900:
+                issue_lines = issue_lines[:2900] + "\n> ...more"
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": issue_lines
+                }
+            })
+            seen_issues.update((issue["title"], issue["state"]["name"]) for issue in filtered_issues)
 
-Summary:
-{summary_text}
-"""
-
-print(summary_text)
-
-client = OpenAI(api_key=OPENAI_API_KEY)
-completion = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[{"role": "user", "content": prompt}]
-)
-summary = completion.choices[0].message.content
-
-if SLACK_WEBHOOK_URL:
-    requests.post(SLACK_WEBHOOK_URL, json={"text": summary})
-else:
-    print(summary)
+    if SLACK_WEBHOOK_URL:
+        resp = requests.post(SLACK_WEBHOOK_URL, json={"blocks": blocks})
+        if resp.status_code != 200:
+            print("❌ Slack POST failed")
+            print("Status code:", resp.status_code)
+            print("Response body:", resp.text)
+        else:
+            print(f"✅ Posted summary for {person} to Slack.")
+    
+from pprint import pprint
+# pprint(blocks)  # Removed since blocks list no longer exists

@@ -25,7 +25,7 @@ query {
 teams_resp = requests.post(
     "https://api.linear.app/graphql",
     json={"query": teams_query},
-    headers={"Authorization": f"Bearer {LINEAR_API_KEY}"}
+    headers={"Authorization": f"{LINEAR_API_KEY}"}
 )
 teams_data = teams_resp.json()
 if "data" not in teams_data or not teams_data["data"].get("teams"):
@@ -74,7 +74,7 @@ for team in teams:
     issues_resp = requests.post(
         "https://api.linear.app/graphql",
         json={"query": issues_query, "variables": {"teamId": team_id}},
-        headers={"Authorization": f"Bearer {LINEAR_API_KEY}"}
+        headers={"Authorization": f"{LINEAR_API_KEY}"}
     )
     issues_data = issues_resp.json()
     if "data" not in issues_data or not issues_data["data"].get("team"):

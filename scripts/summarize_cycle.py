@@ -132,6 +132,8 @@ You are a technical assistant and highly experienced product manager at an AI st
 5. Ready for QA
 Do not include unassigned issues. Avoid listing the same issue twice for a person. For each person, briefly describe what they worked on or have in progress.
 
+Importantly: format the report in Slack Block Kit format, so that it can be posted to Slack.
+
 Summary:
 {summary_text}
 """
